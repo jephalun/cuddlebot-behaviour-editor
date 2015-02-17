@@ -1,0 +1,292 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<script src="assets/js/jquery-1.11.2.min.js"></script>
+<link rel="stylesheet" href="assets/js/jquery-ui.css">
+  <script src="assets/js/jquery-ui.js"></script>
+  <link rel="assets/js/style.css">
+  <script>
+  $(function() {
+    $( "#durationSlider" ).slider({
+      min: 0,
+      max: 2000,
+      value: 1000,
+      slide: function( event, ui ) {
+        $( "#durationValue" ).val( ui.value + ' ms');
+      }
+    });
+    $( "#durationValue" ).val( $( "#durationSlider" ).slider( "value" ) + ' ms');
+
+    $( "#positionSlider" ).slider({
+      min: 0,
+      max: 100,
+      value: 50,
+      slide: function( event, ui ) {
+        $( "#positionValue" ).val( ui.value + ' ms');
+      }
+
+    });
+  });
+  </script>
+
+
+
+  <style>
+      .draggable { width: 60px; height: 60px; position: absolute;}
+      .trackCreationHint { width: 60px; height: 60px; position: absolute; background-color: gray; opacity: .5; }
+      .actuatorTrack { width: 90%; height:60px; float:right; border:2px solid #ccc; padding: 5px; }
+      h3 { clear: left; }
+  </style>
+
+  <script>
+
+    var trackLists = {};
+    var trackIDs = {};
+
+    var trackCreationHint = $("<div></div>", {
+        class: 'trackCreationHint',
+        id: 'trackCreationHint',
+        style: 'display: none;'
+    });
+
+  function addTrackItem( newID, trackType, trackEntries, event ) {
+        console.log("addTrackItem");
+
+        var newObj = $("<div></div>", {
+            class: 'draggable ui-widget-content',
+            id: newID,
+        });
+
+        var trackObj = $('#' + trackType + 'Track');
+        trackObj.append(newObj);
+
+
+        newObj.css('left', trackCreationHint.position().left + 'px');
+        newObj.append('<button id="' + newID + '_closeButton"; style="float:right">x</button><h3>' + newID + '</h3>');
+
+        newObj.draggable({ containment: '#' + trackType + 'Track', scroll: false, axis: "x" });
+
+        trackEntries[trackEntries.length] = newObj;
+
+        newObj.mousemove(function( event ) {
+            event.stopPropagation();
+            console.log(this.id + ' move event');
+        });
+
+        newObj.mouseenter(function( event ) {
+            event.stopPropagation();
+            console.log(this.id + ' enter event');
+            $('#' + this.id + '_closeButton').css('display', 'block ');
+        });
+
+        newObj.mouseleave(function( event ) {
+            event.stopPropagation();
+            console.log(this.id + ' leave event');
+            $('#' + this.id + '_closeButton').css('display', 'none');
+        });
+
+        newObj.click(function( event ) {
+            event.stopPropagation();
+
+            var index = trackEntries.indexOf(newObj);
+
+            console.log(this.id + " clicked, trackEntries.length: " + trackEntries.length + ", index: " + index);
+        });
+
+        newObj.on('click', '#' + newID + '_closeButton', function( event ) {
+            event.stopPropagation();
+
+            var index = trackEntries.indexOf(newObj);
+
+            console.log(this.id + " x clicked");
+
+
+            if (index > -1) {
+                trackEntries.splice(index, 1);
+                newObj.remove();
+            }
+        });
+
+
+
+        console.log("trackEntries.length: " + trackEntries.length + ", index of " + newID + ": " + trackEntries.indexOf(newObj));
+  }
+
+  $(function() {
+    $(".actuatorTrack").click(function( event ) {
+        event.stopPropagation();
+            var name = $(this).attr('name');
+
+        if( trackCreationHint.css('display') != 'none' )
+        {
+                        
+            if( !(name in trackIDs ) )
+            {
+                trackIDs[name] = 1;
+            }
+
+            if( !(name in trackLists ) )
+            {
+                trackLists[name] = [];
+            }
+
+            var newID = name + trackIDs[name]++;
+
+            console.log('name: ' + name + ', newID: ' + newID + ", trackIDs[name]: " + trackIDs[name])
+
+            addTrackItem( newID, name, trackLists[name], event);
+            trackCreationHint.css("display", "none");
+            trackCreationHint.remove();
+        }
+    });
+  });
+
+
+    $(function(){
+        $( ".actuatorTrack" ).mouseenter(
+          function() {
+            console.log("mouseenter in actuatorTrack");
+
+            event.stopPropagation();
+          }
+
+        );
+
+        $( ".actuatorTrack" ).mousemove(
+          function() {
+            console.log("mousemove in actuatorTrack");
+
+            event.stopPropagation();
+
+            var trackObj = $(this);
+            var width = trackCreationHint.width();
+            var leftBound = trackObj.position().left + parseInt(trackObj.css('padding'));
+            var rightBound = leftBound + trackObj.width() - width;
+
+            var name = $(this).attr('name');
+            var spaceToAdd = true;
+
+            if( name in trackLists )
+            {
+                console.log(name + ' is in trackLists');
+
+                var leftOfMouse = -1;
+                var rightOfMouse = 99999;
+                spaceToAdd = false; //assume no space if any items in the track.
+                //now see if we are hovering over a spot with enough room to add:
+                for (var i = 0; i < trackLists[name].length; i++) {
+                    var temp = trackLists[name][i];
+
+                    console.log('temp: ' + temp);
+
+                    if( temp.position().left + temp.width() < event.clientX && temp.position().left + temp.width() > leftOfMouse )
+                        leftOfMouse = temp.position().left + temp.width();
+
+                    if( temp.position().left > event.clientX && temp.position().left < rightOfMouse )
+                        rightOfMouse = temp.position().left;
+                };
+
+                if( leftOfMouse >= 0 )
+                    console.log('leftOfMouse: ' + trackLists[name][leftOfMouse] );
+                if( rightOfMouse >= 0 )
+                    console.log('rightOfMouse: ' + trackLists[name][rightOfMouse] );
+            }
+
+            $(this).append(trackCreationHint);
+            trackCreationHint.css("display", "block");
+
+            var newX = Math.max( leftBound, ( event.clientX - width / 2 ))
+            newX = Math.min( rightBound, newX);
+
+            trackCreationHint.css("left", newX + "px");
+          }
+
+        );
+
+        $( ".actuatorTrack" ).mouseleave(
+          function() {
+            console.log("mouseleave in actuatorTrack");
+            trackCreationHint.css("display", "none");
+            trackCreationHint.remove();
+          }
+        );
+
+
+    });
+
+
+    $(function(){
+        $( "#behaviourEditorPlayButton" ).click(
+          function() {
+            var setPoints = [];
+            setPoints[0] = $( "#durationSlider" ).slider( "value" );
+            setPoints[1] = $( "#positionSlider" ).slider( "value" );
+
+            sendSetPointCommand($( "#actuatorType" ).val(), $( "#delay" ).val(), $( "#loop" ).val(), setPoints)
+          }
+
+        );
+    });
+
+    function sendSetPointCommand(address, delay, loop, setPoints) {
+
+        console.log("address: " + address + ", delay: " + delay + ", loop: " + loop + ", setPoints: " + setPoints);
+        console.log("json: " + JSON.stringify({"address" : address, "delay" : delay, "loop" : loop, "setPoints" : setPoints}))
+
+    $.ajax
+    ({
+        type: "POST",
+        //the url where you want to sent the userName and password to
+        url: 'http://127.0.0.1:8080/setpoint',
+        dataType: 'json',
+        async: true,
+        //json object to sent to the authentication url
+        data: JSON.stringify({"address" : address, "delay" : delay, "loop" : loop, "setPoints" : setPoints}),
+        success: function () {
+            console.log('successfully sent setpoint command, data: ' + data);
+        }
+    })};
+    </script>
+</head>
+<body>
+    <div id="BehaviourEditor" style='border:2px solid #ccc; width:19%; height:50%; float:left; padding: 5px'>
+        <h2>Behaviour Editor</h2>
+        <p>
+            <label for="actuatorType">Actuator:</label>
+            <input type="text" id="actuatorType" style="color:#f6931f; font-weight:bold;">
+        </p>
+        <p>
+            <label for="delay">Delay:</label>
+            <input type="number" id="delay" style="color:#f6931f; font-weight:bold;">
+        </p>
+        <p>
+            <label for="loop">Loop:</label>
+            <input type="number" id="loop" style="color:#f6931f; font-weight:bold;">
+        </p>
+        <p>Position</p>
+        <div id="positionSlider"></div>
+        <p>
+            <label for="durationValue">Duration:</label>
+            <input type="text" id="durationValue" readonly style="border:0; color:#f6931f; font-weight:bold;">
+        </p>
+        <div id="durationSlider"></div>
+        <p>
+            <button id="behaviourEditorPlayButton" style='width:100px; height:50px'>Play</button>
+        </p>
+    </div>
+    <div id="BehaviourTracks" style='width:80%; float:right'>
+        <div id="PurrTrack" name='Purr' class='actuatorTrack'></div>
+
+        <div id="RibsTrack" name='Ribs' class='actuatorTrack'></div>
+        
+        <div id="HeadXTrack" name='HeadX' class='actuatorTrack'></div>
+        
+        <div id="HeadYTrack" name='HeadY' class='actuatorTrack'></div>
+        
+        <div id="SpineTrack" name='Spine' class='actuatorTrack'></div>
+    </div>
+
+</body>
+</html>
+
