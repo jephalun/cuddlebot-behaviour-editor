@@ -5,6 +5,7 @@
 <script src="assets/js/jquery-1.11.2.min.js"></script>
 <link rel="stylesheet" href="assets/js/jquery-ui.css">
   <script src="assets/js/jquery-ui.js"></script>
+  <script src="assets/js/jquery.ui.touch-punch.min.js"></script>
   <link rel="assets/js/style.css">
   <script>
   $(function() {
@@ -33,16 +34,19 @@
 
 
   <style>
-      .draggable { width: 60px; height: 60px; position: absolute;}
-      .trackCreationHint { width: 60px; height: 60px; position: absolute; background-color: gray; opacity: .5; }
+      .actuatorCommand { width: 60px; height: 60px; position: absolute;}
+      #actuatorCommand .ui-selected { background: #F39814; color: white; }
+      .trackCreationHint { pointer-events: none; width: 4px; height: 60px; position: absolute; background-color: gray; opacity: .5; }
       .actuatorTrack { width: 90%; height:60px; float:right; border:2px solid #ccc; padding: 5px; }
       h3 { clear: left; }
   </style>
 
   <script>
 
+    var selectedCmdID = null;
     var trackLists = {};
     var trackIDs = {};
+    var idToCmdMap = {};
 
     var trackCreationHint = $("<div></div>", {
         class: 'trackCreationHint',
@@ -50,47 +54,86 @@
         style: 'display: none;'
     });
 
+  function setselectedCmdID(commandID)
+  {
+    if( selectedCmdID !== null && selectedCmdID !== undefined ){
+
+        console.log('deselecting ' + selectedCmdID);
+        $('#' + selectedCmdID.id + '_closeButton').css('display', 'none');
+    }
+    selectedCmdID = commandID;
+
+    if( selectedCmdID !== null && selectedCmdID !== undefined ){
+
+        data = idToCmdMap[selectedCmdID];
+
+        console.log('data: ' + JSON.stringify(data));
+
+
+        $('#actuatorType').val(data.addr);
+        $('#delay').val(data.delay);
+        $('#loop').val(data.loop);
+        $('#durationSlider').slider( "value", data.setPoints[0] );
+        $('#positionSlider').slider( "value", data.setPoints[1] / 65535 );
+    }
+  }
+
   function addTrackItem( newID, trackType, trackEntries, event ) {
         console.log("addTrackItem");
 
         var newObj = $("<div></div>", {
-            class: 'draggable ui-widget-content',
+            class: 'actuatorCommand ui-widget-content',
             id: newID,
         });
 
         var trackObj = $('#' + trackType + 'Track');
         trackObj.append(newObj);
 
-
         newObj.css('left', trackCreationHint.position().left + 'px');
         newObj.append('<button id="' + newID + '_closeButton"; style="float:right">x</button><h3>' + newID + '</h3>');
 
         newObj.draggable({ containment: '#' + trackType + 'Track', scroll: false, axis: "x" });
-
+        newObj.selectable();
         trackEntries[trackEntries.length] = newObj;
 
-        newObj.mousemove(function( event ) {
-            event.stopPropagation();
-            console.log(this.id + ' move event');
-        });
+        var loopVal = 1;
+        if( trackType == 'Purr' )
+        {
+            loopVal = 65535;
+        }
+
+        idToCmdMap[newID] = {
+            "addr":trackType,
+            "delay":0,
+            "loop":loopVal,
+            "setPoints":[1000,0]
+        };
 
         newObj.mouseenter(function( event ) {
             event.stopPropagation();
             console.log(this.id + ' enter event');
             $('#' + this.id + '_closeButton').css('display', 'block ');
+            trackCreationHint.css("display", "none");
+            trackCreationHint.remove();
         });
 
         newObj.mouseleave(function( event ) {
             event.stopPropagation();
             console.log(this.id + ' leave event');
-            $('#' + this.id + '_closeButton').css('display', 'none');
+
+            if( selectedCmdID != this )
+            {
+                $('#' + this.id + '_closeButton').css('display', 'none');
+            }
         });
 
         newObj.click(function( event ) {
             event.stopPropagation();
 
+            setselectedCmdID(this.id);
             var index = trackEntries.indexOf(newObj);
 
+            $('#' + this.id + '_closeButton').css('display', 'block ');
             console.log(this.id + " clicked, trackEntries.length: " + trackEntries.length + ", index: " + index);
         });
 
@@ -109,14 +152,16 @@
         });
 
 
+        setselectedCmdID(newObj.id);
+
 
         console.log("trackEntries.length: " + trackEntries.length + ", index of " + newID + ": " + trackEntries.indexOf(newObj));
   }
 
   $(function() {
     $(".actuatorTrack").click(function( event ) {
-        event.stopPropagation();
-            var name = $(this).attr('name');
+            
+        var name = $(this).attr('name');
 
         if( trackCreationHint.css('display') != 'none' )
         {
@@ -146,7 +191,7 @@
     $(function(){
         $( ".actuatorTrack" ).mouseenter(
           function() {
-            console.log("mouseenter in actuatorTrack");
+            //console.log("mouseenter in actuatorTrack");
 
             event.stopPropagation();
           }
@@ -155,9 +200,7 @@
 
         $( ".actuatorTrack" ).mousemove(
           function() {
-            console.log("mousemove in actuatorTrack");
-
-            event.stopPropagation();
+            //console.log("mousemove in actuatorTrack");
 
             var trackObj = $(this);
             var width = trackCreationHint.width();
@@ -169,28 +212,35 @@
 
             if( name in trackLists )
             {
-                console.log(name + ' is in trackLists');
-
                 var leftOfMouse = -1;
                 var rightOfMouse = 99999;
+                leftOfMouseIndex = -1;
+                rightOfMouseIndex = -1;
                 spaceToAdd = false; //assume no space if any items in the track.
                 //now see if we are hovering over a spot with enough room to add:
                 for (var i = 0; i < trackLists[name].length; i++) {
                     var temp = trackLists[name][i];
+                    var tempLeft = temp.position().left;
+                    var tempRight = temp.position().right;
 
-                    console.log('temp: ' + temp);
-
-                    if( temp.position().left + temp.width() < event.clientX && temp.position().left + temp.width() > leftOfMouse )
+                    if( temp.position().left + temp.width() < event.clientX && temp.position().left + temp.width() > leftOfMouse ) {
                         leftOfMouse = temp.position().left + temp.width();
+                        leftOfMouseIndex = i;
+                    }
 
-                    if( temp.position().left > event.clientX && temp.position().left < rightOfMouse )
+                    if( temp.position().left > event.clientX && temp.position().left < rightOfMouse ) {
                         rightOfMouse = temp.position().left;
+                        rightOfMouseIndex = i;
+                    }
                 };
 
-                if( leftOfMouse >= 0 )
-                    console.log('leftOfMouse: ' + trackLists[name][leftOfMouse] );
-                if( rightOfMouse >= 0 )
-                    console.log('rightOfMouse: ' + trackLists[name][rightOfMouse] );
+                if( leftOfMouseIndex >= 0 ) {
+                    leftBound = leftOfMouse;
+                }
+
+                if( rightOfMouseIndex >= 0 ) {
+                    rightBound = rightOfMouse;
+                }
             }
 
             $(this).append(trackCreationHint);
@@ -199,14 +249,26 @@
             var newX = Math.max( leftBound, ( event.clientX - width / 2 ))
             newX = Math.min( rightBound, newX);
 
+
+
+            // console.log('event.clientX: ' + event.clientX + ', leftBound: ' + leftBound + ', rightBound: ' + rightBound);
+
             trackCreationHint.css("left", newX + "px");
+//            trackCreationHint.width(rightBound-leftBound);
+
+
+            if( trackCreationHint.position().left - trackCreationHint.width() / 2 <= leftBound || trackCreationHint.position().left + trackCreationHint.width() >= rightBound ) {
+//                trackCreationHint.css("display", "none");
+//                trackCreationHint.remove();
+            }
+
           }
 
         );
 
         $( ".actuatorTrack" ).mouseleave(
           function() {
-            console.log("mouseleave in actuatorTrack");
+            //console.log("mouseleave in actuatorTrack");
             trackCreationHint.css("display", "none");
             trackCreationHint.remove();
           }
@@ -221,7 +283,7 @@
           function() {
             var setPoints = [];
             setPoints[0] = $( "#durationSlider" ).slider( "value" );
-            setPoints[1] = $( "#positionSlider" ).slider( "value" );
+            setPoints[1] = Math.round( 65535 * $( "#positionSlider" ).slider( "value" ) / 100 )
 
             sendSetPointCommand($( "#actuatorType" ).val(), $( "#delay" ).val(), $( "#loop" ).val(), setPoints)
           }
@@ -229,24 +291,60 @@
         );
     });
 
+
+    $(function(){
+        $( "#tracksPlayButton" ).click(
+          function() {
+            currBehaviour = getBehaviourJSON();
+            console.log(currBehaviour);    
+          }
+        );
+    });
+
+    function getBehaviourJSON()
+    {
+        var tracks = $('.actuatorTrack');
+
+        var list = tracks.find('.actuatorCommand');
+        var sortedList = list.sort(function (a, b) {
+            aPos = $('#' + a.id).position().left;
+            bPos = $('#' + b.id).position().left;
+            return +aPos - +bPos;
+        });
+
+
+        cmdList = {};
+
+        for( var i = 0; i < sortedList.length; i++ )
+        {
+            data = idToCmdMap[sortedList[i].id];
+            cmdList[i] = data;
+        }
+
+        behavioursJSON = JSON.stringify(cmdList,null,4);
+
+        return behavioursJSON;
+    }
+
     function sendSetPointCommand(address, delay, loop, setPoints) {
 
-        console.log("address: " + address + ", delay: " + delay + ", loop: " + loop + ", setPoints: " + setPoints);
-        console.log("json: " + JSON.stringify({"address" : address, "delay" : delay, "loop" : loop, "setPoints" : setPoints}))
+        console.log("addr: " + address + ", delay: " + delay + ", loop: " + loop + ", setPoints: " + setPoints);
+        console.log("json: " + JSON.stringify({"addr" : address, "delay" : delay, "loop" : loop, "setPoints" : setPoints}))
 
-    $.ajax
-    ({
-        type: "POST",
-        //the url where you want to sent the userName and password to
-        url: 'http://127.0.0.1:8080/setpoint',
-        dataType: 'json',
-        async: true,
-        //json object to sent to the authentication url
-        data: JSON.stringify({"address" : address, "delay" : delay, "loop" : loop, "setPoints" : setPoints}),
-        success: function () {
-            console.log('successfully sent setpoint command, data: ' + data);
-        }
-    })};
+        $.ajax
+        ({
+            type: "POST",
+            //the url where you want to sent the userName and password to
+            url: location.href + 'setpoint',
+            dataType: 'json',
+            async: true,
+            //json object to sent to the authentication url
+            data: JSON.stringify({"addr" : address, "delay" : delay, "loop" : loop, "setPoints" : setPoints}),
+            success: function () {
+                console.log('successfully sent setpoint command, data: ' + data);
+            }
+        })
+    };
     </script>
 </head>
 <body>
@@ -276,6 +374,12 @@
         </p>
     </div>
     <div id="BehaviourTracks" style='width:80%; float:right'>
+        <div style='width:8%; float:left'>
+            <p>
+                <button id="tracksPlayButton" style='width:100%; height:50px'>Play</button>
+            </p>
+        </div>
+
         <div id="PurrTrack" name='Purr' class='actuatorTrack'></div>
 
         <div id="RibsTrack" name='Ribs' class='actuatorTrack'></div>
