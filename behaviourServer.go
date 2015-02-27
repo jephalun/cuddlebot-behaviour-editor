@@ -37,30 +37,31 @@ func sleepAll() {
 	jsonBytes, err := json.Marshal(sleepParams)
 	if err != nil {
 		fmt.Println("error:", err)
+	} else {
+		sendSleepCommand(jsonBytes)
 	}
-
-	sendSleepCommand(jsonBytes)
 }
 
 func setPointCommand(setPt SetPointParams) {
 	jsonBytes, err := json.Marshal(setPt)
 	if err != nil {
 		fmt.Println("error:", err)
+	} else {
+
+		go sendSetPointCommand(jsonBytes)
+		time.Sleep(time.Millisecond * time.Duration(setPt.Setpoints[0]))
+
+		sleepParams := SleepParams{
+			Addr: []string{setPt.Addr},
+		}
+
+		jsonBytes, err = json.Marshal(sleepParams)
+		if err != nil {
+			fmt.Println("error:", err)
+		} else {
+			sendSleepCommand(jsonBytes)
+		}
 	}
-
-	go sendSetPointCommand(jsonBytes)
-	time.Sleep(time.Millisecond * time.Duration(setPt.Setpoints[0]))
-
-	sleepParams := SleepParams{
-		Addr: []string{setPt.Addr},
-	}
-
-	jsonBytes, err = json.Marshal(sleepParams)
-	if err != nil {
-		fmt.Println("error:", err)
-	}
-
-	sendSleepCommand(jsonBytes)
 }
 
 func sendSetPointCommand(commandBytes []byte) {
@@ -75,14 +76,15 @@ func sendSetPointCommand(commandBytes []byte) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
+		log.Println(err)
+	} else {
+		defer resp.Body.Close()
 
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:", string(body))
+		fmt.Println("response Status:", resp.Status)
+		fmt.Println("response Headers:", resp.Header)
+		body, _ := ioutil.ReadAll(resp.Body)
+		fmt.Println("response Body:", string(body))
+	}
 }
 
 func sendSleepCommand(commandBytes []byte) {
@@ -97,14 +99,15 @@ func sendSleepCommand(commandBytes []byte) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
+		log.Println(err)
+	} else {
+		defer resp.Body.Close()
 
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:", string(body))
+		fmt.Println("response Status:", resp.Status)
+		fmt.Println("response Headers:", resp.Header)
+		body, _ := ioutil.ReadAll(resp.Body)
+		fmt.Println("response Body:", string(body))
+	}
 }
 
 func mainView(w http.ResponseWriter, r *http.Request) {
@@ -129,15 +132,16 @@ func setpoint(rw http.ResponseWriter, req *http.Request) {
 	err := decoder.Decode(&setPt)
 	if err != nil {
 		log.Println(err)
-	}
-	log.Println(setPt)
+	} else {
+		log.Println(setPt)
 
-	var setPtParams SetPointParams
-	setPtParams.Addr = setPt.Addr
-	setPtParams.Delay = setPt.Delay
-	setPtParams.Loop = setPt.Loop
-	setPtParams.Setpoints = setPt.Setpoints
-	setPointCommand(setPtParams)
+		var setPtParams SetPointParams
+		setPtParams.Addr = setPt.Addr
+		setPtParams.Delay = setPt.Delay
+		setPtParams.Loop = setPt.Loop
+		setPtParams.Setpoints = setPt.Setpoints
+		setPointCommand(setPtParams)
+	}
 }
 
 func main() {

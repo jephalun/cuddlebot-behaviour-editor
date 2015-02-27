@@ -3,9 +3,11 @@
 <html>
 <head>
 <script src="assets/js/jquery-1.11.2.min.js"></script>
-<link rel="stylesheet" href="assets/js/jquery-ui.css">
+<link rel="stylesheet" href="assets/css/jquery-ui.css">
   <script src="assets/js/jquery-ui.js"></script>
   <script src="assets/js/jquery.ui.touch-punch.min.js"></script>
+  <link rel="stylesheet" href="assets/css/bootstrap.min.css"></script>
+  <script src="assets/js/bootstrap.min.js"></script>
   <link rel="assets/js/style.css">
   <script>
   $(function() {
@@ -34,10 +36,10 @@
 
 
   <style>
-      .actuatorCommand { width: 60px; height: 60px; position: absolute;}
+      .actuatorCommand { width: 71px; height: 71px; position: absolute;}
       #actuatorCommand .ui-selected { background: #F39814; color: white; }
-      .trackCreationHint { pointer-events: none; width: 4px; height: 60px; position: absolute; background-color: gray; opacity: .5; }
-      .actuatorTrack { width: 90%; height:60px; float:right; border:2px solid #ccc; padding: 5px; }
+      .trackCreationHint { pointer-events: none; width: 4px; height: 71px; position: absolute; background-color: gray; opacity: .5; }
+      .actuatorTrack { width: 90%; height:80px; float:right; border:2px solid #ccc; padding: 2px; }
       h3 { clear: left; }
   </style>
 
@@ -103,7 +105,7 @@
         }
 
         idToCmdMap[newID] = {
-            "addr":trackType,
+            "addr":trackType.toLowerCase(),
             "delay":0,
             "loop":loopVal,
             "setPoints":[1000,0]
@@ -285,6 +287,14 @@
             setPoints[0] = $( "#durationSlider" ).slider( "value" );
             setPoints[1] = Math.round( 65535 * $( "#positionSlider" ).slider( "value" ) / 100 )
 
+            $( "#behaviourEditorPlayButton" ).prop('disabled',true);
+                $( "#behaviourEditorPlayButton" ).text("Playing...");
+            setTimeout(function(){
+                console.log("BUTTON DONE");
+                $( "#behaviourEditorPlayButton" ).prop('disabled',false);
+                $( "#behaviourEditorPlayButton" ).text("Play");
+            }, setPoints[0]);
+
             sendSetPointCommand($( "#actuatorType" ).val(), $( "#delay" ).val(), $( "#loop" ).val(), setPoints)
           }
 
@@ -296,10 +306,25 @@
         $( "#tracksPlayButton" ).click(
           function() {
             currBehaviour = getBehaviourJSON();
-            console.log(currBehaviour);    
+            console.log(JSON.stringify(currBehaviour,null,4));
+
+            if( currBehaviour.length > 0 ){
+                setTimeout(waitAndSendNextCommand(currBehaviour,0), currBehaviour[0].delayAfterPrevCmd);
+            }
           }
         );
     });
+
+    function waitAndSendNextCommand( behaviour, currIndex )
+    {
+        if( currIndex < behaviour.length ){
+            
+            console.log('waitAndSendNextCommand, sending: ' + behaviour[currIndex]);
+
+            //sendSetPointCommand(behaviour[currIndex].addr, behaviour[currIndex].delay, behaviour[currIndex].loop, behaviour[currIndex].setPoints)
+            setTimeout(waitAndSendNextCommand(behaviour, currIndex++), behaviour[currIndex].delayAfterPrevCmd);
+        }
+    }
 
     function getBehaviourJSON()
     {
@@ -313,17 +338,19 @@
         });
 
 
-        cmdList = {};
+        var cmdList = [];
+        var prevCmdTime = 0;
 
         for( var i = 0; i < sortedList.length; i++ )
         {
-            data = idToCmdMap[sortedList[i].id];
+            var data = idToCmdMap[sortedList[i].id];
+            var currTime = $('#' + sortedList[i].id).position().left;
+            data.delayAfterPrevCmd = currTime - prevCmdTime;
             cmdList[i] = data;
+            prevCmdTime = currTime;
         }
 
-        behavioursJSON = JSON.stringify(cmdList,null,4);
-
-        return behavioursJSON;
+        return cmdList;
     }
 
     function sendSetPointCommand(address, delay, loop, setPoints) {
@@ -370,13 +397,13 @@
         </p>
         <div id="durationSlider"></div>
         <p>
-            <button id="behaviourEditorPlayButton" style='width:100px; height:50px'>Play</button>
+            <button id="behaviourEditorPlayButton" class="btn" style='width:100px; height:50px'>Play</button>
         </p>
     </div>
     <div id="BehaviourTracks" style='width:80%; float:right'>
         <div style='width:8%; float:left'>
             <p>
-                <button id="tracksPlayButton" style='width:100%; height:50px'>Play</button>
+                <button id="tracksPlayButton" class='btn' style='width:100%; height:50px'>Play</button>
             </p>
         </div>
 
