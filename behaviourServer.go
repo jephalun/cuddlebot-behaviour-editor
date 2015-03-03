@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -8,15 +9,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
-
-type SetPointWeb struct {
-	Addr      string
-	Delay     uint16 `json:",string"`
-	Loop      uint16 `json:",string"`
-	Setpoints []uint16
-}
 
 type SetPointParams struct {
 	Addr      string
@@ -28,6 +23,20 @@ type SetPointParams struct {
 type SleepParams struct {
 	Addr []string
 }
+
+type BehaviourParams struct {
+	Name      string
+	Data      string
+	Overwrite bool
+}
+
+type GestureParams struct {
+	Name string
+}
+
+var behaviourNameToDataMap map[string]string
+
+var DEFAULT_PATH string
 
 func sleepAll() {
 	sleepParams := SleepParams{
@@ -128,7 +137,7 @@ func setpoint(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Access-Control-Allow-Credentials", "true")
 
 	decoder := json.NewDecoder(req.Body)
-	var setPt SetPointWeb
+	var setPt SetPointParams
 	err := decoder.Decode(&setPt)
 	if err != nil {
 		log.Println(err)
@@ -144,8 +153,140 @@ func setpoint(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func saveBehaviourParams(rw http.ResponseWriter, req *http.Request) {
+	rw.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// if origin := req.Header.Get("Origin"); origin != "" {
+	// 	rw.Header().Set("Access-Control-Allow-Origin", origin)
+	// }
+
+	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	rw.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token")
+	rw.Header().Set("Access-Control-Allow-Credentials", "true")
+
+	decoder := json.NewDecoder(req.Body)
+	var behParams BehaviourParams
+	err := decoder.Decode(&behParams)
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.Println(behParams)
+		log.Println("BehaviourParams to save: ", behParams.Name)
+		if _, ok := behaviourNameToDataMap[behParams.Name]; ok && !behParams.Overwrite {
+			log.Printf("Behaviour \"%s\" already exists, verifying overwrite", behParams.Name)
+			rw.Write([]byte("overwrite?"))
+		} else {
+			behaviourNameToDataMap[behParams.Name] = behParams.Data
+
+			writeBehavioursToFile(DEFAULT_PATH)
+		}
+	}
+}
+
+func loadBehaviourParams(rw http.ResponseWriter, req *http.Request) {
+	rw.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// if origin := req.Header.Get("Origin"); origin != "" {
+	// 	rw.Header().Set("Access-Control-Allow-Origin", origin)
+	// }
+
+	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	rw.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token")
+	rw.Header().Set("Access-Control-Allow-Credentials", "true")
+
+	bytes, err := ioutil.ReadAll(req.Body)
+
+	if err != nil {
+		log.Println(err)
+	} else {
+		if string(bytes) == "defaults" {
+			log.Println("Loading default behaviours")
+
+			behsStr, err := loadBehavioursFromFile(DEFAULT_PATH)
+
+			if err != nil {
+				log.Println(err)
+			} else {
+				rw.Write([]byte(behsStr))
+			}
+		}
+	}
+}
+
+func gesture(rw http.ResponseWriter, req *http.Request) {
+	rw.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// if origin := req.Header.Get("Origin"); origin != "" {
+	// 	rw.Header().Set("Access-Control-Allow-Origin", origin)
+	// }
+
+	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	rw.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token")
+	rw.Header().Set("Access-Control-Allow-Credentials", "true")
+
+	decoder := json.NewDecoder(req.Body)
+	var gesture GestureParams
+	err := decoder.Decode(&gesture)
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.Println("gesture: ", gesture)
+	}
+}
+
+func writeBehavioursToFile(path string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	w := bufio.NewWriter(file)
+
+	fmt.Fprint(w, "[")
+	started := false
+	for name, data := range behaviourNameToDataMap {
+		if started {
+			fmt.Fprint(w, ",")
+		}
+		started = true
+		fmt.Fprint(w, "{\"Name\":\""+name+"\", \"Data\":"+data+"}")
+	}
+	fmt.Fprint(w, "]")
+
+	return w.Flush()
+}
+
+func loadBehavioursFromFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	allBehsString := ""
+	for scanner.Scan() {
+		var line = scanner.Text()
+		//		log.Println("line: ", line)
+		allBehsString += line
+	}
+
+	return allBehsString, scanner.Err()
+}
+
 func main() {
+	DEFAULT_PATH = "./DefaultBehaviours.txt"
+
+	//	loadBehavioursFromFile(DEFAULT_PATH)
+
+	behaviourNameToDataMap = make(map[string]string)
+
+	http.HandleFunc("/gesture", gesture)
 	http.HandleFunc("/setpoint", setpoint)
+	http.HandleFunc("/savebehaviour", saveBehaviourParams)
+	http.HandleFunc("/loadbehaviour", loadBehaviourParams)
+
 	http.Handle("/", http.FileServer(http.Dir("./web")))
 
 	//	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("./web/assets"))))
