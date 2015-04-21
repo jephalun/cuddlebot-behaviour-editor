@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -25,9 +26,11 @@ type SleepParams struct {
 }
 
 type BehaviourParams struct {
-	Name      string
-	Data      string
-	Overwrite bool
+	FileName           string
+	BehaviourName      string
+	Data               string
+	OverwriteFile      bool
+	OverwriteBehaviour bool
 }
 
 type GestureParams struct {
@@ -37,6 +40,8 @@ type GestureParams struct {
 var behaviourNameToDataMap map[string]string
 
 var DEFAULT_PATH string
+
+var currGesture = "unknown"
 
 func sleepAll() {
 	sleepParams := SleepParams{
@@ -129,7 +134,7 @@ func setpoint(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// if origin := req.Header.Get("Origin"); origin != "" {
-	// 	rw.Header().Set("Access-Control-Allow-Origin", origin)
+	//  rw.Header().Set("Access-Control-Allow-Origin", origin)
 	// }
 
 	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
@@ -157,7 +162,7 @@ func saveBehaviourParams(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// if origin := req.Header.Get("Origin"); origin != "" {
-	// 	rw.Header().Set("Access-Control-Allow-Origin", origin)
+	//  rw.Header().Set("Access-Control-Allow-Origin", origin)
 	// }
 
 	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
@@ -171,14 +176,18 @@ func saveBehaviourParams(rw http.ResponseWriter, req *http.Request) {
 		log.Println(err)
 	} else {
 		log.Println(behParams)
-		log.Println("BehaviourParams to save: ", behParams.Name)
-		if _, ok := behaviourNameToDataMap[behParams.Name]; ok && !behParams.Overwrite {
-			log.Printf("Behaviour \"%s\" already exists, verifying overwrite", behParams.Name)
-			rw.Write([]byte("overwrite?"))
-		} else {
-			behaviourNameToDataMap[behParams.Name] = behParams.Data
+		log.Println("BehaviourParams to save: ", behParams.BehaviourName)
 
-			writeBehavioursToFile(DEFAULT_PATH)
+		if _, err := os.Stat(behParams.FileName); err == nil && !behParams.OverwriteFile {
+			log.Printf("File \"%s\" already exists, verifying overwrite", behParams.BehaviourName)
+			rw.Write([]byte("overwriteFile"))
+		} else if _, ok := behaviourNameToDataMap[behParams.BehaviourName]; ok && !behParams.OverwriteBehaviour {
+			log.Printf("Behaviour \"%s\" already exists, verifying overwrite", behParams.BehaviourName)
+			rw.Write([]byte("overwriteBehaviour"))
+		} else {
+			behaviourNameToDataMap[behParams.BehaviourName] = behParams.Data
+
+			writeBehavioursToFile(behParams.FileName)
 		}
 	}
 }
@@ -187,7 +196,7 @@ func loadBehaviourParams(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// if origin := req.Header.Get("Origin"); origin != "" {
-	// 	rw.Header().Set("Access-Control-Allow-Origin", origin)
+	//  rw.Header().Set("Access-Control-Allow-Origin", origin)
 	// }
 
 	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
@@ -196,18 +205,36 @@ func loadBehaviourParams(rw http.ResponseWriter, req *http.Request) {
 
 	bytes, err := ioutil.ReadAll(req.Body)
 
+	var path string
+
 	if err != nil {
 		log.Println(err)
 	} else {
 		if string(bytes) == "defaults" {
-			log.Println("Loading default behaviours")
+			path = DEFAULT_PATH
+		} else {
+			path = "./" + string(bytes)
+		}
 
-			behsStr, err := loadBehavioursFromFile(DEFAULT_PATH)
+		log.Printf("loadBehaviourParams: path: %v\n", path)
+		behsStr, err := loadBehavioursFromFile(path)
 
-			if err != nil {
+		if err != nil {
+			log.Println(err)
+		} else {
+
+			rw.Write([]byte(behsStr))
+
+			var data map[string]interface{}
+
+			if err := json.Unmarshal(bytes, &data); err != nil {
+				log.Printf("Unable to load behaviours from file: %v\n", path)
 				log.Println(err)
 			} else {
-				rw.Write([]byte(behsStr))
+
+				for name, data := range data {
+					log.Printf("name: %v, data: %v\n", name, data)
+				}
 			}
 		}
 	}
@@ -217,21 +244,14 @@ func gesture(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// if origin := req.Header.Get("Origin"); origin != "" {
-	// 	rw.Header().Set("Access-Control-Allow-Origin", origin)
+	//  rw.Header().Set("Access-Control-Allow-Origin", origin)
 	// }
 
 	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 	rw.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token")
 	rw.Header().Set("Access-Control-Allow-Credentials", "true")
 
-	decoder := json.NewDecoder(req.Body)
-	var gesture GestureParams
-	err := decoder.Decode(&gesture)
-	if err != nil {
-		log.Println(err)
-	} else {
-		log.Println("gesture: ", gesture)
-	}
+	rw.Write([]byte(currGesture))
 }
 
 func writeBehavioursToFile(path string) error {
@@ -268,19 +288,55 @@ func loadBehavioursFromFile(path string) (string, error) {
 	allBehsString := ""
 	for scanner.Scan() {
 		var line = scanner.Text()
-		//		log.Println("line: ", line)
+		//      log.Println("line: ", line)
 		allBehsString += line
 	}
 
 	return allBehsString, scanner.Err()
 }
 
+func listenForGestureCommands(ipPortStr string) {
+
+	udpAddr, err := net.ResolveUDPAddr("udp", ipPortStr)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	udpConn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	for {
+
+		fmt.Println("reading udp")
+
+		readData := make([]byte, 1000)
+		_, _, err := udpConn.ReadFromUDP(readData)
+
+		fmt.Println("read from udp")
+
+		if err != nil {
+			log.Println(err)
+			currGesture = "unknown"
+		} else {
+			msg := string(readData)
+			currGesture = msg
+		}
+	}
+}
+
 func main() {
 	DEFAULT_PATH = "./DefaultBehaviours.txt"
 
-	//	loadBehavioursFromFile(DEFAULT_PATH)
+	//  loadBehavioursFromFile(DEFAULT_PATH)
 
 	behaviourNameToDataMap = make(map[string]string)
+
+	// ipPortStr := ":1234"
+	//  go listenForGestureCommands(ipPortStr)
 
 	http.HandleFunc("/gesture", gesture)
 	http.HandleFunc("/setpoint", setpoint)
@@ -289,7 +345,7 @@ func main() {
 
 	http.Handle("/", http.FileServer(http.Dir("./web")))
 
-	//	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("./web/assets"))))
+	//  http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("./web/assets"))))
 	err := http.ListenAndServe(":8080", nil)
 
 	if err != nil {

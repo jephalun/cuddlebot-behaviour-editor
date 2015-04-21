@@ -31,7 +31,7 @@
         var selectedCmdID = null;
         var prevSelectedCmdID = null;
         var trackLists = {};
-        var trackIDs = {};
+        var trackCounts = {};
         var idToCmdMap = {};
 
         var trackCreationHint = $("<div></div>", {
@@ -45,7 +45,7 @@
         var currCmdIndex = 0;
         var behaviourPlaying = false;
 
-        var maxDurationMS = 10000;
+        var maxDurationMS = 5000;
         var defaultDurationMS = 1000;
 
         var sweepMouseDown = false;
@@ -53,6 +53,7 @@
         var behNameToCmdListMap = {};
         var gestureToBehMap = {};
 
+        var recognizedGesture = '';
 
 
 
@@ -66,6 +67,12 @@
 
                 if( selectedCmdID !== null && selectedCmdID !== undefined ){
                     idToCmdMap[selectedCmdID].setPoints[0] = ui.value;
+
+                    var timeline = $('#TimeLine');
+                    var trackWidth = timeline.width();
+                    var pixelsPerMS = maxDurationMS / trackWidth;
+
+                    $("#" + selectedCmdID).width( ui.value / pixelsPerMS );
                 }
               }
             });
@@ -175,8 +182,6 @@
             id: newID,
         });
 
-
-
         var trackObj = $('#' + trackType + 'Track');
         var timeline = $('#TimeLine');
         var trackWidth = timeline.width();
@@ -187,7 +192,7 @@
         newObj.css('left', position + 'px');
         newObj.width( defaultDurationMS / pixelsPerMS );
 
-        newObj.append('<button id="' + newID + '_closeButton"; style="float:right">x</button><h3>' + newID + '</h3>');
+        newObj.append('<button id="' + newID + '_closeButton"; style="float:right">x</button><h3>' + trackType + '</h3>');
 
         newObj.draggable({ containment: '#' + trackType + 'Track', scroll: false, axis: "x" });
         newObj.selectable();
@@ -248,12 +253,14 @@
             if (index > -1) {
                 trackEntries.splice(index, 1);
                 newObj.remove();
+                showTrackCreationHint = true;
             }
         });
 
 
         setselectedCmdID(newObj.id);
 
+        $('#saveButton').prop('disabled',false);
 
         console.log("trackEntries.length: " + trackEntries.length + ", index of " + newID + ": " + trackEntries.indexOf(newObj));
   }
@@ -266,9 +273,9 @@
         if( trackCreationHint.css('display') != 'none' )
         {
                         
-            if( !(name in trackIDs ) )
+            if( !(name in trackCounts ) )
             {
-                trackIDs[name] = 1;
+                trackCounts[name] = 0;
             }
 
             if( !(name in trackLists ) )
@@ -276,9 +283,10 @@
                 trackLists[name] = [];
             }
 
-            var newID = name + trackIDs[name]++;
+            trackCounts[name]++;
+            var newID = name + trackCounts[name];
 
-//            console.log('name: ' + name + ', newID: ' + newID + ", trackIDs[name]: " + trackIDs[name])
+//            console.log('name: ' + name + ', newID: ' + newID + ", trackCounts[name]: " + trackCounts[name])
 
             addTrackItem( newID, name, trackLists[name], event, trackCreationHint.position().left);
             trackCreationHint.css("display", "none");
@@ -534,49 +542,6 @@
                         console.log('animation complete');
                     }
             });
-
-    //         if( currCmdIndex < currBehaviour.length ){
-
-    //             var timeline = $('#TimeLine');
-    //             var trackWidth = timeline.width();
-    //             var pixelsPerMS = maxDurationMS / trackWidth;
-    //             var currCmd = currBehaviour[currCmdIndex];
-    //             var cmdSent = false;
-
-    //             var targetPos = currCmd.cmdTime + ( currCmd.setPoints[0] / pixelsPerMS ) 
-    //             var distance = targetPos - currSweepPos - parseInt(timeline.css('padding'))// + currCmd.setPoints[0],
-    //             var animDuration = distance * pixelsPerMS;
-
-    // //            console.log("cmd addr: " + currCmd.addr + ", targetPos: " + targetPos + ", distance: " + distance + ", animDuration: " + animDuration);
-
-    //             sweep.animate({
-    //                 left: "+=" + distance,
-    //                 }, 
-    //                 { 
-    //                     duration: animDuration, 
-    //                     easing: 'linear', 
-    //                     progress: function(a, p, c ) {
-    //                         var pos = sweep.position().left;
-
-    //                         $('#currBehTime').val( Math.round(pos * pixelsPerMS) );
-    //                             if( !cmdSent && pos > currCmd.cmdTime )
-    //                             {
-    //                                 cmdSent = true;
-    //                                 sendSetPointCommand(currCmd.addr, currCmd.delay, currCmd.loop, currCmd.setPoints);
-    //                                 console.log('sent cmd: ' + currCmd.addr);
-    //                                 currCmdIndex++;
-    //                             }
-    //                     },
-    //                     complete: function() {
-    //                         console.log('finished cmd: ' + currCmd.addr);
-    //                         playBehaviour();
-    //                     }
-    //             });
-    //         }
-    //         else
-    //         {
-    //             //stopBehaviour();
-    //         }
         }
     }
 
@@ -625,22 +590,35 @@
         })
     };
 
+    //One of too many initialization functions, could find them all and put them together, or split up and call each function in a tighter
+    //init routine
     $(function(){
         $( "#saveButton" ).click(
             function() {
-                saveBehaviour($('#behaviourName').val(), JSON.stringify(getBehaviourJSON()), false);
+                var files = $( "#openBehaviourButton" )[0].files;
+
+                if( files.length != 0 )
+                {
+                    saveBehaviour(files[0].name, $('#behaviourName').val(), JSON.stringify(getBehaviourJSON()), false, false);
+                }
+                else
+                {
+                    alert('Please provide a file to save the behaviours in!');
+                }
             }
         );
 
         $( "#openBehaviourButton" ).change(
             function() {
-                loadBehaviour('test');
+
+                console.log('openBehaviourButton, file: ' + $( "#openBehaviourButton" )[0].files[0].name )
+                loadBehaviourSet($( "#openBehaviourButton" )[0].files[0].name);
             }
         );
 
-
         //default
-        loadBehaviour('defaults');
+        loadBehaviourSet('defaults');
+        clearBehaviour();
 
         $('.gestureControlButton').click(
             function(){
@@ -650,6 +628,11 @@
                 $( "#tracksPlayButton" ).click();
             }
         );
+
+        // setInterval(function(){
+        //     console.log('curr gesture: ' + recognizedGesture);
+        //     getCurrentGesture();
+        // }, 1000);
 
     });
 
@@ -679,7 +662,6 @@
                 }
             });
         });
-
         
         $('<option>').html('').appendTo('.behaviourSelector');
         $.each( behNameToCmdListMap, function( key, value ) {
@@ -690,6 +672,8 @@
 
     function clearBehaviour()
     {
+        $('#saveButton').prop('disabled',true);
+
         stopBehaviour();
         $('.actuatorCommand').remove();
 
@@ -697,7 +681,7 @@
         selectedCmdID = null;
         prevSelectedCmdID = null;
         trackLists = {};
-        trackIDs = {};
+        trackCounts = {};
         idToCmdMap = {};
 
         currBehaviour = [];
@@ -716,9 +700,9 @@
 
             var name = cmd.addr;
                         
-            if( !(name in trackIDs ) )
+            if( !(name in trackCounts ) )
             {
-                trackIDs[name] = 1;
+                trackCounts[name] = 1;
             }
 
             if( !(name in trackLists ) )
@@ -726,9 +710,9 @@
                 trackLists[name] = [];
             }
 
-            var newID = name + trackIDs[name]++;
+            var newID = name + trackCounts[name]++;
 
-//            console.log('name: ' + name + ', newID: ' + newID + ", trackIDs[name]: " + trackIDs[name])
+//            console.log('name: ' + name + ', newID: ' + newID + ", trackCounts[name]: " + trackCounts[name])
 
             addTrackItem( newID, name, trackLists[name], event, cmd.cmdTime);
 
@@ -739,10 +723,16 @@
         trackCreationHint.remove();
     }
 
-    function saveBehaviour(name, behaviourStr, overwrite) {
+    function saveBehaviour(fileName, behaviourName, behaviourStr, overwriteFile, overwriteBehaviour) {
 
         // console.log("addr: " + address + ", delay: " + delay + ", loop: " + loop + ", setPoints: " + setPoints);
         // console.log("json: " + JSON.stringify({"addr" : address, "delay" : delay, "loop" : loop, "setPoints" : setPoints}))
+
+        if( behaviourName === '' )
+        {
+            alert('Please provide a behaviourName for the behaviour!');
+            return;
+        }
 
         $.ajax
         ({
@@ -752,27 +742,40 @@
             dataType: 'text',
             async: true,
             //json object to sent to the authentication url
-            data: JSON.stringify({"Name" : name, 'Data' : behaviourStr, 'Overwrite' : overwrite}),
+            data: JSON.stringify({  'FileName' : fileName,
+                                    'BehaviourName' : behaviourName,
+                                    'Data' : behaviourStr,
+                                    'OverwriteFile' : overwriteFile,
+                                    'OverwriteBehaviour' : overwriteBehaviour
+                                }),
             success: function (msg, status, jqXHR) {
                 console.log("msg: " + msg)
 
-                if( msg === 'overwrite?' )
+                if( msg === 'overwriteFile' )
                 {
-                    console.log('verifying overwrite');
-                    if( confirm('Behaviour "' + name + '" already exists, are you sure you want to overwrite it?') )
+                    console.log('verifying file overwrite');
+                    if( confirm('File "' + fileName + '" already exists, are you sure you want to overwrite it?') )
                     {
-                        saveBehaviour(name, behaviourStr, true);
+                        saveBehaviour(fileName, behaviourName, behaviourStr, true, overwriteBehaviour);
+                    }
+                }
+                else if( msg === 'overwriteBehaviour' )
+                {
+                    console.log('verifying behaviour overwrite');
+                    if( confirm('Behaviour "' + behaviourName + '" already exists, are you sure you want to overwrite it?') )
+                    {
+                        saveBehaviour(fileName, behaviourName, behaviourStr, overwriteFile, true);
                     }
                 }
                 else
                 {
-                    console.log('successfully saved behaviour: ' + name);
+                    console.log('successfully saved behaviour: ' + behaviourName);
                 }
             }
         })
     };
 
-    function loadBehaviour(behaviourName) {
+    function loadBehaviourSet(behaviourName) {
 
         // console.log("addr: " + address + ", delay: " + delay + ", loop: " + loop + ", setPoints: " + setPoints);
         // console.log("json: " + JSON.stringify({"addr" : address, "delay" : delay, "loop" : loop, "setPoints" : setPoints}))
@@ -788,12 +791,13 @@
             data: behaviourName,
             success: function (msg, status, jqXHR) {
 
-                if( behaviourName === 'defaults' && msg.length > 0 )
+                if( msg.length > 0 )
                 {
+                    behNameToCmdListMap = {};
 //                    console.log('default behaviours: ' + msg);
                     var jsonObj = jQuery.parseJSON(msg);
 
-                    console.log('read behaviours: ' + JSON.stringify(jsonObj,null,4));
+                    // console.log('read behaviours: ' + JSON.stringify(jsonObj,null,4));
 
                     $.each( jsonObj, function( i, behObj ) {
                         behNameToCmdListMap[behObj.Name] = behObj.Data;
@@ -803,6 +807,23 @@
 
                     refreshBehaviourLists();
                 }
+            }
+        })
+    };
+
+    function getCurrentGesture() {
+        $.ajax
+        ({
+            type: "POST",
+            //the url where you want to sent the userName and password to
+            url: location.href + 'gesture',
+            dataType: 'text',
+            async: true,
+            //json object to sent to the authentication url
+            data: 'whatever',
+
+            success: function (msg, status, jqXHR) {
+                recognizedGesture = msg;
             }
         })
     };
@@ -840,8 +861,12 @@
                 </p>
             </div>
             <div class='container-fluid'>
+                
                 <div class='gestureControl' id='notouch'>
                     <button id='notouch_button' class='gestureControlButton btn btn-primary btn-lg' style='width:150px'>No Touch</button>
+                </div>
+                <div class='gestureControl' id='constant'>
+                    <button id='constant_button' class='gestureControlButton btn btn-primary btn-lg' style='width:150px'>Constant</button>
                 </div>
                 <div class='gestureControl' id='rub'>
                     <button id='rub_button' class='gestureControlButton btn btn-primary btn-lg' style='width:150px'>Rub</button>
@@ -858,6 +883,7 @@
                 <div class='gestureControl' id='pat'>
                     <button id='pat_button' class='gestureControlButton btn btn-primary btn-lg' style='width:150px'>Pat</button>
                 </div>
+                
             </div>
         </div>
         <div class='col-md-9'>
@@ -865,20 +891,26 @@
                 <div class='col-md-12'>
                     <p>
  
+                        <div class='container-fluid'>
+                            <div class='col-md-4'>
+                                <input type='file' id="openBehaviourButton" class='btn btn-default btn-lg'>
+                            </div>
+                            <div class='col-md-2'>
+                                <label for="behaviourName">Behaviour Name:</label>
+                                <input type="text" id="behaviourName" style="color:#f6931f; font-weight:bold;">
+                            </div>
+                            <div class='col-md-2'>
+                                <button id="saveButton" class='btn btn-default btn-lg'>
+                                    <span class="glyphicon glyphicon-save" aria-hidden="true"></span> Save
+                                </button>
+                            </div>
+                        </div>
                         <label for="currBehSelector">Current Behaviour:</label>
                         <div class='gestureControl' id='currBehaviourSelector' style='color:#f6931f; font-weight:bold; border:0; width:auto'>
                         </div> 
-                        <label for="behaviourName">Behaviour Name:</label>
-                        <input type="text" id="behaviourName" style="color:#f6931f; font-weight:bold;">
-                        <button id="saveButton" class='btn btn-default btn-lg'>
-                            <span class="glyphicon glyphicon-save" aria-hidden="true"></span> Save
-                        </button>
-<!-- 
-                        <input type='file' id="openBehaviourButton" class='btn btn-default btn-lg'>
-                            <span class="glyphicon glyphicon-open" aria-hidden="true"></span> Load
-                        </button>
+                        
 
- -->                    </p>
+                    </p>
                 </div>
             </div>
             <div id="BehaviourTracks" class='container-fluid'>
