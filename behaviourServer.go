@@ -335,8 +335,8 @@ func main() {
 
 	behaviourNameToDataMap = make(map[string]string)
 
-	// ipPortStr := ":1234"
-	//  go listenForGestureCommands(ipPortStr)
+	ipPortStr := ":1234"
+	go listenForGestureCommands(ipPortStr)
 
 	http.HandleFunc("/gesture", gesture)
 	http.HandleFunc("/setpoint", setpoint)
