@@ -267,12 +267,12 @@
 
   $(function() {
     $(".actuatorTrack").click(function( event ) {
-            
+
         var name = $(this).attr('name');
 
         if( trackCreationHint.css('display') != 'none' )
         {
-                        
+
             if( !(name in trackCounts ) )
             {
                 trackCounts[name] = 0;
@@ -385,8 +385,8 @@
                 {
                     trackCreationHint.css("display", "none");
                     trackCreationHint.remove();
-                }    
-            }            
+                }
+            }
         );
 
         $( ".actuatorTrack" ).mouseleave(
@@ -400,6 +400,10 @@
 
     });
 
+    function breathe() {
+        sendSetPointCommand("ribs",0,1,[1000,0]);
+        console.log("ribs",0,1,[1000,0]);
+    }
 
     $(function(){
         $( "#behaviourEditorPlayButton" ).click(
@@ -408,7 +412,7 @@
             setPoints[0] = $( "#durationSlider" ).slider( "value" );
             setPoints[1] = Math.round( 65535 * $( "#positionSlider" ).slider( "value" ) / 100 )
 
-            pauseBehaviour();            
+            pauseBehaviour();
 
             $( "#behaviourEditorPlayButton" ).prop('disabled',true);
             setTimeout(function(){
@@ -416,6 +420,7 @@
             }, setPoints[0]);
 
             sendSetPointCommand($( "#actuatorType" ).val(), parseInt($( "#delay" ).val()), parseInt($( "#loop" ).val()), setPoints)
+            console.log( $( "#actuatorType" ).val(), parseInt($( "#delay" ).val()), parseInt($( "#loop" ).val()), setPoints )
           }
 
         );
@@ -429,7 +434,7 @@
         else
         {
             $('#tracksPlayButton').html('<span class="glyphicon glyphicon-play" aria-hidden="true"></span> Play');
-        }    
+        }
     }
 
     $(function(){
@@ -515,17 +520,17 @@
             var pixelsPerMS = maxDurationMS / trackWidth;
             var lastCmd = currBehaviour[currBehaviour.length - 1];
 
-            var targetPos = lastCmd.cmdTime + ( lastCmd.setPoints[0] / pixelsPerMS ) 
+            var targetPos = lastCmd.cmdTime + ( lastCmd.setPoints[0] / pixelsPerMS )
             var distance = targetPos - currSweepPos - parseInt(timeline.css('padding'))// + currCmd.setPoints[0],
             var animDuration = distance * pixelsPerMS;
 
 
             sweep.animate({
                 left: "+=" + distance,
-                },  
-                { 
-                    duration: animDuration, 
-                    easing: 'linear', 
+                },
+                {
+                    duration: animDuration,
+                    easing: 'linear',
                     progress: function(a, p, c ) {
                         var pos = sweep.position().left;
 
@@ -662,7 +667,7 @@
                 }
             });
         });
-        
+
         $('<option>').html('').appendTo('.behaviourSelector');
         $.each( behNameToCmdListMap, function( key, value ) {
             $('<option>').attr({'value':'' + key + ''}).html(key).appendTo('.behaviourSelector');
@@ -699,7 +704,7 @@
             cmd = currBehaviour[i];
 
             var name = cmd.addr;
-                        
+
             if( !(name in trackCounts ) )
             {
                 trackCounts[name] = 1;
@@ -827,7 +832,36 @@
             }
         })
     };
+    // Breathing actions for Laura's study
+    var breathing;
+    // startBreathing
+    // Loops the breathing function an infinite number of times
+    // @param duration : the duration of the wait between breathe() actions
+    // @note : the duration should be at least ~2 seconds
+    function startBreathing(duration) {
+        breathing = setInterval(function () {
+            breathe();
+        }, duration);
+    }
 
+    // stopBreathing
+    // Stops the infinite breathing loop
+    function stopBreathing() {
+        clearInterval(breathing);
+    }
+    
+    // breathingLoop
+    // Loops the breathing function a finite number of times
+    // @param times : number of times you want the breathing to loop
+    // @param duration : the duration of the wait between breathe() actions
+    // @note : the duration should be at least ~2 seconds
+    function breathingLoop(times,duration){
+        for (var i=0;i<duration;i++) {
+            setTimeout(function() {
+                	breathe();
+                },i*duration);
+        }
+    }
     </script>
 </head>
 <body>
@@ -861,7 +895,7 @@
                 </p>
             </div>
             <div class='container-fluid'>
-                
+
                 <div class='gestureControl' id='notouch'>
                     <button id='notouch_button' class='gestureControlButton btn btn-primary btn-lg' style='width:150px'>No Touch</button>
                 </div>
@@ -883,14 +917,14 @@
                 <div class='gestureControl' id='pat'>
                     <button id='pat_button' class='gestureControlButton btn btn-primary btn-lg' style='width:150px'>Pat</button>
                 </div>
-                
+
             </div>
         </div>
         <div class='col-md-9'>
             <div class='container-fluid'>
                 <div class='col-md-12'>
                     <p>
- 
+
                         <div class='container-fluid'>
                             <div class='col-md-4'>
                                 <input type='file' id="openBehaviourButton" class='btn btn-default btn-lg'>
@@ -907,8 +941,8 @@
                         </div>
                         <label for="currBehSelector">Current Behaviour:</label>
                         <div class='gestureControl' id='currBehaviourSelector' style='color:#f6931f; font-weight:bold; border:0; width:auto'>
-                        </div> 
-                        
+                        </div>
+
 
                     </p>
                 </div>
@@ -921,11 +955,11 @@
                     <div id="purrTrack" name='purr' class='actuatorTrack'></div>
 
                     <div id="ribsTrack" name='ribs' class='actuatorTrack'></div>
-                    
+
                     <div id="headxTrack" name='headx' class='actuatorTrack'></div>
-                    
+
                     <div id="headyTrack" name='heady' class='actuatorTrack'></div>
-                    
+
                     <div id="spineTrack" name='spine' class='actuatorTrack'></div>
                 </div>
             </div>
@@ -950,5 +984,3 @@
     </div>
 </body>
 </html>
-
-    
